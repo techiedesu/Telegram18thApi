@@ -41,7 +41,10 @@ type SpotifyController(config: IOptions<SpotifySettings>,
             let spotifyClient = SpotifyClient(response.AccessToken)
             try
                 let! spotifyUser = spotifyClient.UserProfile.Current()
-                do! userStore.Update({ user with SingleAuthToken = None; SpotifyToken = Some response.AccessToken }) :> Task
+                do! userStore.Update({ user with
+                                            SingleAuthToken = None
+                                            SpotifyToken = Some response.AccessToken
+                                            SpotifyRefreshToken = Some response.RefreshToken }) :> Task
 
                 return this.Ok($"Authorized as {spotifyUser.DisplayName}. Close window.") :> IActionResult
             with e ->

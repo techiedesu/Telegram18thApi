@@ -13,6 +13,7 @@ type TelegramId = int64
 type User = {
     TelegramId: TelegramId
     SpotifyToken: string option
+    SpotifyRefreshToken: string option
 
     SingleAuthToken: string option
 
@@ -21,9 +22,14 @@ type User = {
 }
 
 [<Sealed>]
-type UserStore(configOpt: IOptionsMonitor<ElasticSettings>, stjSerializer: StjElasticsearchSerializer, logger: ILogger<UserStore>) as this =
+type UserStore(
+    configOpt: IOptionsMonitor<ElasticSettings>,
+    stjSerializer: StjElasticsearchSerializer,
+    logger: ILogger<UserStore>) as this =
+
     let mutable prefix = configOpt.CurrentValue.Prefix
-    let mutable client =
+
+    let mutable elasticClient =
         let pool = new SingleNodeConnectionPool(Uri(configOpt.CurrentValue.Node))
         let cs = new ConnectionSettings(pool, sourceSerializer = ConnectionSettings.SourceSerializerFactory(fun x y -> stjSerializer))
         ElasticClient(cs)
@@ -31,7 +37,7 @@ type UserStore(configOpt: IOptionsMonitor<ElasticSettings>, stjSerializer: StjEl
     do
         %configOpt.OnChange(fun newConfig ->
             logger.LogInformation("Called update {newConfig}", newConfig)
-            client <-
+            elasticClient <-
                 let pool = new SingleNodeConnectionPool(Uri(newConfig.Node))
                 let cs = new ConnectionSettings(pool, sourceSerializer = ConnectionSettings.SourceSerializerFactory(fun x y -> stjSerializer))
                 ElasticClient(cs)
@@ -46,7 +52,7 @@ type UserStore(configOpt: IOptionsMonitor<ElasticSettings>, stjSerializer: StjEl
         match existingUser with
         | None ->
             do!
-                client
+                elasticClient
                     .IndexAsync<User>(user,
                         selector = fun descriptor ->
                             descriptor
@@ -67,7 +73,7 @@ type UserStore(configOpt: IOptionsMonitor<ElasticSettings>, stjSerializer: StjEl
                                     UpdatedAt = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds() }
 
             let! indexResponse =
-                    client
+                    elasticClient
                         .IndexAsync<User>(updatedUser,
                             selector = fun descriptor ->
                                 descriptor
@@ -81,9 +87,9 @@ type UserStore(configOpt: IOptionsMonitor<ElasticSettings>, stjSerializer: StjEl
 
     member _.GetByTelegramId(telegramId: TelegramId) = task {
         let! searchResponse =
-            client.SearchAsync<User>(fun s ->
-                let sr = Nest.SearchRequest(this.Index, Size = (Nullable 1))
-                let query = Nest.QueryContainerDescriptor<User>()
+            elasticClient.SearchAsync<User>(fun s ->
+                let sr = SearchRequest(this.Index, Size = (Nullable 1))
+                let query = QueryContainerDescriptor<User>()
 
                 let q = sprintf """
 {
@@ -104,7 +110,7 @@ type UserStore(configOpt: IOptionsMonitor<ElasticSettings>, stjSerializer: StjEl
 
                 %query.Raw(q telegramId)
                 sr.Query <- query
-                sr :> Nest.ISearchRequest)
+                sr :> ISearchRequest)
 
         return searchResponse.Hits
                |> Seq.tryHead
@@ -113,9 +119,9 @@ type UserStore(configOpt: IOptionsMonitor<ElasticSettings>, stjSerializer: StjEl
 
     member _.GetBySingleAuthToken(singleAuthToken: string) = task {
         let! searchResponse =
-            client.SearchAsync<User>(fun s ->
-                let sr = Nest.SearchRequest(this.Index, Size = (Nullable 1000))
-                let query = Nest.QueryContainerDescriptor<User>()
+            elasticClient.SearchAsync<User>(fun s ->
+                let sr = SearchRequest(this.Index, Size = (Nullable 1000))
+                let query = QueryContainerDescriptor<User>()
 
                 let q = sprintf """
 {
@@ -136,7 +142,7 @@ type UserStore(configOpt: IOptionsMonitor<ElasticSettings>, stjSerializer: StjEl
 
                 %query.Raw(q singleAuthToken)
                 sr.Query <- query
-                sr :> Nest.ISearchRequest)
+                sr :> ISearchRequest)
 
         return searchResponse.Hits
                |> Seq.tryHead
@@ -150,6 +156,7 @@ type UserStore(configOpt: IOptionsMonitor<ElasticSettings>, stjSerializer: StjEl
             let user = {
                 TelegramId = telegramUserId
                 SpotifyToken = None
+                SpotifyRefreshToken = None
                 SingleAuthToken = Some token
                 CreatedAt = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds()
                 UpdatedAt = 0L

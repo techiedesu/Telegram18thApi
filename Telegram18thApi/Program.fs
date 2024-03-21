@@ -1,7 +1,7 @@
 ﻿module Telegram18thApi.Program
 
-open Microsoft.AspNetCore
 open Microsoft.AspNetCore.Hosting
+open Microsoft.Extensions.Hosting
 open NLog.Web
 
 [<EntryPoint>]
@@ -11,15 +11,11 @@ let rec main args =
 
         try
             let builder =
-                WebHost
+                Host
                     .CreateDefaultBuilder(args)
-                    .SuppressStatusMessages(true)
-                    .UseNLog()
-                    .UseStartup<Startup>()
+                    .ConfigureWebHostDefaults(fun wb -> %wb.UseStartup<Startup>())
 
             let app = builder.Build()
-
-            logger.Info("Telegram18thApi started. Press Ctrl-C to exit")
             do! app.RunAsync()
 
             logger.Info("Exiting...")

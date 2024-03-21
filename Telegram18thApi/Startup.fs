@@ -7,8 +7,10 @@ open Microsoft.Extensions.Configuration
 open Microsoft.Extensions.DependencyInjection
 open Microsoft.Extensions.Hosting
 open Microsoft.Extensions.Logging
+open Microsoft.Extensions.Options
 open NLog.Extensions.Logging
 open System.Text.Json.Serialization
+open Telegram.Bot
 open YoutubeSearchApi.Net.Services
 
 [<Sealed>]
@@ -18,6 +20,7 @@ type Startup(configuration: IConfiguration) =
             .Configure<AppSettings>(configuration)
             .Configure<ElasticSettings>(configuration.GetSection("elastic"))
             .Configure<SpotifySettings>(configuration.GetSection("spotify"))
+            .Configure<TelegramSettings>(configuration.GetSection("telegram"))
             .AddLogging(
                 fun loggingBuilder ->
                     %loggingBuilder
@@ -26,7 +29,7 @@ type Startup(configuration: IConfiguration) =
                 )
 
         %services
-            .AddControllers()
+            .AddControllers().AddControllersAsServices()
             .AddJsonOptions(fun options ->
                     options.JsonSerializerOptions.WriteIndented <- true
 
@@ -40,6 +43,12 @@ type Startup(configuration: IConfiguration) =
              .AddSingleton<CustomYouTube>()
              .AddSingleton<YoutubeSearchClient>(YoutubeSearchClient(new HttpClient()))
              .AddSingleton<TrackSearchService>()
+
+        %services.AddSingleton<ITelegramBotClient>(fun sp ->
+            let config = sp.GetRequiredService<IOptions<TelegramSettings>>().Value
+            let client = TelegramBotClient(config.Token)
+            client.SetWebhookAsync(config.Webhook, secretToken = config.TokenSecret).ConfigureAwait(false).GetAwaiter().GetResult()
+            client :> ITelegramBotClient)
 
     member _.Configure(app: IApplicationBuilder, env: IWebHostEnvironment) =
         if env.IsDevelopment() then

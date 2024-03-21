@@ -5,6 +5,7 @@ type AppSettings = {
     Minio: MinioSettings
     Elastic: ElasticSettings
     Spotify: SpotifySettings
+    Telegram: TelegramSettings
 }
 
 and [<CLIMutable>] MinioSettings = {
@@ -22,4 +23,10 @@ and [<CLIMutable>] SpotifySettings = {
     ClientId: string
     ClientSecret: string
     RedirectUri: string
+}
+
+and [<CLIMutable>] TelegramSettings = {
+    TokenSecret: string
+    Token: string
+    Webhook: string
 }

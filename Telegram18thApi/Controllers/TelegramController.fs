@@ -1,16 +1,21 @@
 ﻿namespace Telegram18thApi.Controllers
 
 open System
+open System.Threading.Tasks
 open Microsoft.AspNetCore.Mvc
 open Microsoft.Extensions.Logging
 open Microsoft.Extensions.Options
+open Telegram.Bot
+open Telegram.Bot.Types
 open Telegram18thApi
+open Telegram18thApi.Filters
 
 [<Sealed>]
 [<ApiController>]
 type TelegramController(logger: ILogger<TelegramController>,
                         configOpt: IOptionsMonitor<AppSettings>,
                         trackSearchService: TrackSearchService,
+                        tgClient: ITelegramBotClient,
                         userStore: UserStore) as this =
     inherit ControllerBase()
     let mutable config = configOpt.CurrentValue
@@ -36,6 +41,7 @@ type TelegramController(logger: ILogger<TelegramController>,
             CreatedAt = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds()
             UpdatedAt = 6L
             SingleAuthToken = Some "notas"
+            SpotifyRefreshToken = None
         })
         return this.Ok(res)
     }
@@ -48,4 +54,11 @@ type TelegramController(logger: ILogger<TelegramController>,
             return this.Ok("не удалось") :> IActionResult
         | Some res ->
             return this.File(res, "audio/aac")
+    }
+
+    [<SanitizeTelegramRequest>]
+    [<HttpPost("/webhook")>]
+    member _.Webhook(ctx: Update) = task {
+        let! message =  tgClient.SendDiceAsync(ctx.Message.Chat.Id) :> Task
+        return this.Ok(message)
     }
